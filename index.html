@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bingo Game for Kids</title>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+  background: #f0f8ff;
+}
+
+#menu {
+  margin-top: 50px;
+}
+
+#stars {
+  font-size: 24px;
+  margin-top: 10px;
+}
+
+#board {
+  display: grid;
+  gap: 10px;
+  margin-top: 15px;
+  justify-content: center;
+}
+
+.cell {
+  width: 80px;
+  height: 80px;
+  font-size: 24px;
+  font-weight: bold;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: orange;
+  position: relative;
+}
+
+.correct {
+  background: #4CAF50 !important;
+  color: white;
+  box-shadow: 0 0 15px 5px gold;
+}
+
+.dance {
+  animation: dance 0.3s infinite alternate;
+}
+
+@keyframes dance {
+  from { transform: rotate(-10deg) scale(1.1); }
+  to { transform: rotate(10deg) scale(1.2); }
+}
+
+.wrong-x {
+  position: absolute;
+  font-size: 40px;
+  color: red;
+  font-weight: bold;
+  animation: pop 0.3s ease;
+}
+
+@keyframes pop {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+button {
+  padding: 12px 18px;
+  font-size: 18px;
+  border-radius: 10px;
+  border: none;
+  margin: 10px;
+  background: #4CAF50;
+  color: white;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🎉 Bingo Game 🎉</h1>
+
+<div id="menu">
+  <h2>Choose Your Game Size</h2>
+  <button onclick="startGame(4)">Small (4 x 4)</button>
+  <button onclick="startGame(5)">Large (5 x 5)</button>
+</div>
+
+<div id="game" style="display:none;">
+  <div id="stars"></div>
+  <button id="repeatBtn" onclick="speakNumber()">🔊 Repeat Number</button>
+  <div id="board"></div>
+</div>
+
+<canvas id="fireworks"></canvas>
+
+<script>
+let board = [];
+let found = new Set();
+let targetNumber = null;
+let gameActive = true;
+let stars = 0;
+let gridSize = 5;
+
+const correctSound = new Audio("https://actions.google.com/sounds/v1/cartoon/woodpecker_pecking.ogg");
+const wrongSound = new Audio("https://actions.google.com/sounds/v1/cartoon/slide_whistle_to_drum_hit.ogg");
+const winSound = new Audio("https://actions.google.com/sounds/v1/cartoon/fireworks_burst.ogg");
+
+function startGame(size) {
+  gridSize = size;
+  document.getElementById("menu").style.display = "none";
+  document.getElementById("game").style.display = "block";
+
+  const boardDiv = document.getElementById("board");
+  boardDiv.style.gridTemplateColumns = `repeat(${gridSize}, 80px)`;
+
+  updateStars();
+  generateBoard();
+}
+
+function updateStars() {
+  document.getElementById("stars").innerText = "⭐".repeat(stars);
+}
+
+function generateBoard() {
+  gameActive = true;
+  document.getElementById("repeatBtn").disabled = false;
+
+  const boardDiv = document.getElementById("board");
+  boardDiv.innerHTML = "";
+  found.clear();
+  board = [];
+
+  let total = gridSize * gridSize;
+
+  let nums = [];
+  while (nums.length < total) {
+    let n = Math.floor(Math.random()*100);
+    if (!nums.includes(n)) nums.push(n);
+  }
+
+  nums.forEach(num => {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.innerText = num;
+
+    cell.onclick = () => handleClick(cell, num);
+    boardDiv.appendChild(cell);
+
+    board.push(num);
+  });
+
+  pickNewNumber();
+}
+
+function speakNumber() {
+  if (!gameActive) return;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(new SpeechSynthesisUtterance(targetNumber));
+}
+
+function pickNewNumber() {
+  if (!gameActive) return;
+  const remaining = board.filter(n => !found.has(n));
+  targetNumber = remaining[Math.floor(Math.random()*remaining.length)];
+  speakNumber();
+}
+
+function handleClick(cell, num) {
+  if (!gameActive || found.has(num)) return;
+
+  if (num === targetNumber) {
+    cell.classList.add("correct");
+    correctSound.play();
+    found.add(num);
+
+    if (checkBingo()) {
+      celebrateWin();
+    } else {
+      setTimeout(() => pickNewNumber(), 1000);
+    }
+  } else {
+    wrongSound.play();
+    showWrongX(cell);
+  }
+}
+
+function showWrongX(cell) {
+  const x = document.createElement("div");
+  x.className = "wrong-x";
+  x.innerText = "✖";
+  cell.appendChild(x);
+
+  setTimeout(() => cell.removeChild(x), 1000);
+}
+
+function checkBingo() {
+  const grid = [...document.querySelectorAll(".cell")];
+  let lines = [];
+
+  // rows
+  for (let r=0; r<gridSize; r++) {
+    let row = [];
+    for (let c=0; c<gridSize; c++) row.push(r*gridSize + c);
+    lines.push(row);
+  }
+
+  // columns
+  for (let c=0; c<gridSize; c++) {
+    let col = [];
+    for (let r=0; r<gridSize; r++) col.push(r*gridSize + c);
+    lines.push(col);
+  }
+
+  // diagonals
+  let d1 = [], d2 = [];
+  for (let i=0; i<gridSize; i++) {
+    d1.push(i*gridSize + i);
+    d2.push(i*gridSize + (gridSize-i-1));
+  }
+  lines.push(d1, d2);
+
+  return lines.find(line =>
+    line.every(i => found.has(parseInt(grid[i].innerText)))
+  );
+}
+
+function celebrateWin() {
+  gameActive = false;
+  document.getElementById("repeatBtn").disabled = true;
+
+  const grid = [...document.querySelectorAll(".cell")];
+  const winLine = checkBingo();
+
+  winLine.forEach(i => grid[i].classList.add("dance"));
+
+  winSound.play();
+  startFireworks();
+
+  stars++;
+  updateStars();
+
+  setTimeout(() => {
+    if (confirm("🎉 You got a BINGO! Play again?")) {
+      generateBoard();
+    }
+  }, 5000);
+}
+
+/* Fireworks */
+const canvas = document.getElementById("fireworks");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let particles = [];
+
+function startFireworks() {
+  particles = [];
+  for (let i=0;i<100;i++) {
+    particles.push({
+      x: canvas.width/2,
+      y: canvas.height/2,
+      dx: (Math.random()-0.5)*6,
+      dy: (Math.random()-0.5)*6,
+      color: `hsl(${Math.random()*360},100%,50%)`
+    });
+  }
+  animateFireworks();
+}
+
+function animateFireworks() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  particles.forEach(p => {
+    p.x += p.dx;
+    p.y += p.dy;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x,p.y,4,4);
+  });
+  requestAnimationFrame(animateFireworks);
+}
+</script>
+
+</body>
+</html>
